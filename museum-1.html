@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Bizning muzeyimiz</title>
+<style>
+html,body{margin:0;height:100%;overflow:hidden;background:#f1eee8;touch-action:none;font-family:system-ui,sans-serif;-webkit-user-select:none;user-select:none}
+canvas{display:block;touch-action:none}
+#stick{position:fixed;right:22px;bottom:34px;width:130px;height:130px;border-radius:50%;background:rgba(0,0,0,.12);touch-action:none;z-index:3}
+#knob{position:absolute;left:35px;top:35px;width:60px;height:60px;border-radius:50%;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.25);pointer-events:none}
+#eye{position:fixed;left:16px;bottom:34px;background:rgba(255,255,255,.9);border-radius:20px;padding:8px 14px;font-size:14px;color:#333;z-index:3;box-shadow:0 1px 6px rgba(0,0,0,.15)}
+#hint{position:fixed;left:50%;bottom:30%;transform:translateX(-50%);width:min(300px,80%);background:rgba(60,60,60,.88);color:#fff;border-radius:14px;padding:12px 16px;font-size:14px;line-height:1.4;text-align:center;z-index:3;transition:opacity .5s;pointer-events:none}
+#zoom{position:fixed;inset:0;background:rgba(0,0,0,.92);display:none;align-items:center;justify-content:center;z-index:10}
+#zoom img,#zoom video{max-width:96%;max-height:88%;border-radius:6px}
+#x{position:absolute;top:16px;right:16px;width:44px;height:44px;border:0;border-radius:50%;background:#fff;font-size:22px}
+</style>
+</head>
+<body>
+<div id="eye">👁 0 / 0</div>
+<div id="hint">O'ngdagi doira bilan yuring · ekranni surib aylantiring<br>Rasmga bosing — yaqindan ko'rasiz</div>
+<div id="stick"><div id="knob"></div></div>
+<div id="zoom"><button id="x">✕</button><div id="zc"></div></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const rid = location.pathname.split('/').pop();
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const $ = id => document.getElementById(id);
+
+// ---------- sahna ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xf1eee8);
+const cam = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 100);
+const ren = new THREE.WebGLRenderer({ antialias: true });
+ren.outputEncoding = THREE.sRGBEncoding;
+ren.setPixelRatio(Math.min(devicePixelRatio, 2));
+ren.setSize(innerWidth, innerHeight);
+document.body.prepend(ren.domElement);
+scene.add(new THREE.HemisphereLight(0xffffff, 0xd9d2c5, 1.0));
+const sun = new THREE.DirectionalLight(0xffffff, 0.5);
+sun.position.set(3, 8, 4);
+scene.add(sun);
+
+const L = c => new THREE.MeshLambertMaterial({ color: c });
+const WH = 4;            // devor balandligi
+let half = 6;            // xona yarim kengligi
+const pics = [];
+let seenCount = 0;
+
+// ---------- odam (3D qahramon) ----------
+const man = new THREE.Group();
+scene.add(man);
+function box(w, h, d, c, x, y, z, p) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), L(c));
+  m.position.set(x, y, z); p.add(m); return m;
+}
+function ball(r, c, x, y, z, p, sy = 1) {
+  const m = new THREE.Mesh(new THREE.SphereGeometry(r, 16, 12), L(c));
+  m.position.set(x, y, z); m.scale.y = sy; p.add(m); return m;
+}
+function limb(w, h, d, c, x, y, tip) {
+  const g = new THREE.Group();
+  g.position.set(x, y, 0); man.add(g);
+  box(w, h, d, c, 0, -h / 2, 0, g);
+  tip(g, h);
+  return g;
+}
+const SKIN = 0xf0c8a4, SHIRT = 0x2b3d6b, PANTS = 0x1b1b1f;
+box(0.38, 0.54, 0.21, SHIRT, 0, 1.17, 0, man);
+box(0.1, 0.08, 0.1, SKIN, 0, 1.47, 0, man);
+ball(0.14, SKIN, 0, 1.64, 0, man);
+ball(0.153, 0x3a2a20, 0, 1.68, -0.025, man, 0.92);
+ball(0.018, 0x111111, -0.05, 1.64, 0.13, man);
+ball(0.018, 0x111111, 0.05, 1.64, 0.13, man);
+const armL = limb(0.1, 0.5, 0.1, SHIRT, -0.25, 1.42, (g, h) => box(0.09, 0.1, 0.09, SKIN, 0, -h - 0.04, 0, g));
+const armR = limb(0.1, 0.5, 0.1, SHIRT, 0.25, 1.42, (g, h) => box(0.09, 0.1, 0.09, SKIN, 0, -h - 0.04, 0, g));
+const legL = limb(0.14, 0.84, 0.14, PANTS, -0.1, 0.9, (g, h) => box(0.15, 0.07, 0.24, 0x0d0d0d, 0, -h + 0.02, 0.04, g));
+const legR = limb(0.14, 0.84, 0.14, PANTS, 0.1, 0.9, (g, h) => box(0.15, 0.07, 0.24, 0x0d0d0d, 0, -h + 0.02, 0.04, g));
+man.position.set(0, 0, 1);
+
+// ---------- xona ----------
+function build(items) {
+  const n = items.length;
+  const perWall = Math.ceil(n / 4);
+  const S = Math.max(11, perWall * 3.6 + 2);
+  half = S / 2;
+  $('eye').textContent = '👁 0 / ' + n;
+
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(S, S), L(0xe6dfd2));
+  floor.rotation.x = -Math.PI / 2; scene.add(floor);
+  const ceil = new THREE.Mesh(new THREE.PlaneGeometry(S, S), L(0xffffff));
+  ceil.rotation.x = Math.PI / 2; ceil.position.y = WH; scene.add(ceil);
+
+  const walls = [
+    { p: [0, -half], ry: 0, d: [1, 0] },
+    { p: [half, 0], ry: -Math.PI / 2, d: [0, 1] },
+    { p: [0, half], ry: Math.PI, d: [-1, 0] },
+    { p: [-half, 0], ry: Math.PI / 2, d: [0, -1] },
+  ];
+  walls.forEach(w => {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(S, WH), L(0xf6f3ee));
+    m.position.set(w.p[0], WH / 2, w.p[1]); m.rotation.y = w.ry; scene.add(m);
+    const b = new THREE.Mesh(new THREE.PlaneGeometry(S, 0.18), L(0xd8d1c4)); // plintus
+    b.position.set(w.p[0] + Math.sin(w.ry) * 0.01, 0.09, w.p[1] + Math.cos(w.ry) * 0.01); b.rotation.y = w.ry; scene.add(b);
+  });
+
+  // devordagi sarlavha
+  const tc = document.createElement('canvas'); tc.width = 1024; tc.height = 200;
+  const g = tc.getContext('2d');
+  g.fillStyle = '#2b2b2b'; g.textAlign = 'center';
+  g.font = '600 92px Georgia, serif'; g.fillText('Bizning muzeyimiz', 512, 105);
+  g.font = '28px sans-serif'; g.fillStyle = '#888'; g.fillText('M U Z E Y', 512, 160);
+  const tt = new THREE.CanvasTexture(tc); tt.encoding = THREE.sRGBEncoding;
+  const title = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 0.7), new THREE.MeshBasicMaterial({ map: tt, transparent: true }));
+  title.position.set(0, 3.4, -half + 0.02); scene.add(title);
+
+  items.forEach((it, i) => {
+    const k = i % 4, idx = Math.floor(i / 4);
+    const count = Math.ceil((n - k) / 4);
+    const w = walls[k];
+    const off = (idx - (count - 1) / 2) * 3.6;
+    const ry = w.ry, inx = Math.sin(ry), inz = Math.cos(ry);
+
+    const mat = new THREE.MeshBasicMaterial({ color: 0xcccccc });
+    const pic = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mat);
+    pic.position.set(w.p[0] + w.d[0] * off + inx * 0.06, 1.8, w.p[1] + w.d[1] * off + inz * 0.06);
+    pic.rotation.y = ry;
+    pic.scale.set(2, 1.5, 1);
+    const frame = new THREE.Mesh(new THREE.PlaneGeometry(1.08, 1.08), new THREE.MeshBasicMaterial({ color: 0x8a5a2b }));
+    frame.position.z = -0.01; pic.add(frame);
+    scene.add(pic);
+    pics.push({ mesh: pic, it, seen: false });
+
+    const fit = (w0, h0) => {
+      const r = w0 / h0; let W = 2.7, H = W / r;
+      if (H > 2.3) { H = 2.3; W = H * r; }
+      pic.scale.set(W, H, 1);
+    };
+    if (it.type === 'image') {
+      new THREE.TextureLoader().load(it.src, t => {
+        t.encoding = THREE.sRGBEncoding;
+        mat.map = t; mat.color.set(0xffffff); mat.needsUpdate = true;
+        fit(t.image.width, t.image.height);
+      });
+    } else {
+      const v = document.createElement('video');
+      v.src = it.src; v.loop = true; v.muted = true; v.playsInline = true;
+      v.setAttribute('playsinline', ''); v.crossOrigin = 'anonymous';
+      v.onloadedmetadata = () => { fit(v.videoWidth, v.videoHeight); v.play().catch(() => {}); };
+      const t = new THREE.VideoTexture(v); t.encoding = THREE.sRGBEncoding;
+      mat.map = t; mat.color.set(0xffffff);
+    }
+  });
+}
+
+// Demo rejim: server bo'lmasa sinov rasmlar
+function demo() {
+  return ['#e63946', '#f4a261', '#2a9d8f', '#457b9d', '#8e44ad', '#e9c46a', '#264653', '#c1121f'].map((c, i) => {
+    const cv = document.createElement('canvas');
+    cv.width = 640; cv.height = i % 2 ? 480 : 640;
+    const x = cv.getContext('2d');
+    const gr = x.createLinearGradient(0, 0, cv.width, cv.height);
+    gr.addColorStop(0, c); gr.addColorStop(1, '#111');
+    x.fillStyle = gr; x.fillRect(0, 0, cv.width, cv.height);
+    x.fillStyle = '#fff'; x.font = 'bold 140px sans-serif'; x.textAlign = 'center';
+    x.fillText(i + 1, cv.width / 2, cv.height / 2 + 45);
+    return { type: 'image', src: cv.toDataURL('image/jpeg', 0.85) };
+  });
+}
+fetch('/api/' + rid)
+  .then(r => { if (!r.ok) throw 0; return r.json(); })
+  .then(items => build(items.length ? items : demo()))
+  .catch(() => build(demo()));
+
+// ---------- boshqaruv ----------
+let jx = 0, jy = 0, jid = null;
+const stick = $('stick'), knob = $('knob');
+function hideHint() { $('hint').style.opacity = 0; }
+setTimeout(hideHint, 6000);
+function setJ(e) {
+  const r = stick.getBoundingClientRect();
+  let dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2);
+  const R = r.width / 2 - 12, l = Math.hypot(dx, dy);
+  if (l > R) { dx *= R / l; dy *= R / l; }
+  jx = dx / R; jy = -dy / R;
+  knob.style.transform = `translate(${dx}px,${dy}px)`;
+  hideHint();
+}
+stick.addEventListener('pointerdown', e => { jid = e.pointerId; stick.setPointerCapture(jid); setJ(e); });
+stick.addEventListener('pointermove', e => { if (e.pointerId === jid) setJ(e); });
+const endJ = e => { if (e.pointerId === jid) { jid = null; jx = jy = 0; knob.style.transform = ''; } };
+stick.addEventListener('pointerup', endJ);
+stick.addEventListener('pointercancel', endJ);
+
+const keys = {};
+addEventListener('keydown', e => keys[e.code] = 1);
+addEventListener('keyup', e => delete keys[e.code]);
+
+let yaw = 0, pitch = 0.4;
+const looks = new Map();
+const cv = ren.domElement;
+cv.addEventListener('pointerdown', e => looks.set(e.pointerId, { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, t: performance.now() }));
+cv.addEventListener('pointermove', e => {
+  const o = looks.get(e.pointerId); if (!o) return;
+  yaw -= (e.clientX - o.x) * 0.006;
+  pitch = clamp(pitch + (e.clientY - o.y) * 0.004, 0.08, 1.1);
+  o.x = e.clientX; o.y = e.clientY;
+});
+cv.addEventListener('pointerup', e => {
+  const o = looks.get(e.pointerId); looks.delete(e.pointerId);
+  if (o && Math.hypot(e.clientX - o.x0, e.clientY - o.y0) < 8 && performance.now() - o.t < 400) tap(e);
+});
+cv.addEventListener('pointercancel', e => looks.delete(e.pointerId));
+
+// rasmga bosish -> kattalashtirish
+const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+function tap(e) {
+  ndc.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+  ray.setFromCamera(ndc, cam);
+  const h = ray.intersectObjects(pics.map(p => p.mesh))[0];
+  if (!h) return;
+  const p = pics.find(p => p.mesh === h.object);
+  const el = document.createElement(p.it.type === 'video' ? 'video' : 'img');
+  el.src = p.it.src;
+  if (p.it.type === 'video') { el.controls = true; el.autoplay = true; el.loop = true; el.playsInline = true; }
+  $('zc').replaceChildren(el);
+  $('zoom').style.display = 'flex';
+}
+$('x').onclick = () => { $('zoom').style.display = 'none'; $('zc').replaceChildren(); };
+
+// ---------- asosiy sikl ----------
+const clock = new THREE.Clock();
+let phase = 0, amp = 0, faceY = 0;
+function loop() {
+  requestAnimationFrame(loop);
+  const dt = Math.min(clock.getDelta(), 0.1);
+
+  let ix = jx + ((keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0));
+  let iy = jy + ((keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0));
+  const mag = Math.min(1, Math.hypot(ix, iy));
+  if (mag > 0.05) {
+    // kameraga nisbatan yo'nalish
+    const fx = -Math.sin(yaw), fz = -Math.cos(yaw), rx = Math.cos(yaw), rz = -Math.sin(yaw);
+    let dx = fx * iy + rx * ix, dz = fz * iy + rz * ix;
+    const l = Math.hypot(dx, dz); dx /= l; dz /= l;
+    const sp = 2.6 * mag;
+    const lim = half - 0.45;
+    man.position.x = clamp(man.position.x + dx * sp * dt, -lim, lim);
+    man.position.z = clamp(man.position.z + dz * sp * dt, -lim, lim);
+    const target = Math.atan2(dx, dz);
+    faceY += (((target - faceY + Math.PI * 3) % (Math.PI * 2)) - Math.PI) * Math.min(1, dt * 12);
+    phase += dt * 9 * (0.5 + mag * 0.5);
+    amp += (0.85 * mag - amp) * Math.min(1, dt * 10);
+  } else {
+    amp += (0 - amp) * Math.min(1, dt * 10);
+  }
+  man.rotation.y = faceY;
+  const s = Math.sin(phase) * amp;
+  legL.rotation.x = s; legR.rotation.x = -s;
+  armL.rotation.x = -s * 0.9; armR.rotation.x = s * 0.9;
+  man.children[0].position.y = 1.17 + Math.abs(Math.cos(phase)) * 0.025 * amp;
+
+  // kamera: odamning orqasida
+  const dist = 3.4, cp = Math.cos(pitch);
+  const cx = clamp(man.position.x + Math.sin(yaw) * cp * dist, -half + 0.25, half - 0.25);
+  const cz = clamp(man.position.z + Math.cos(yaw) * cp * dist, -half + 0.25, half - 0.25);
+  const cy = clamp(1.2 + Math.sin(pitch) * dist, 0.5, WH - 0.3);
+  cam.position.set(cx, cy, cz);
+  cam.lookAt(man.position.x, 1.1, man.position.z);
+
+  // ko'rilgan rasmlar hisobi
+  pics.forEach(p => {
+    if (!p.seen && Math.hypot(p.mesh.position.x - man.position.x, p.mesh.position.z - man.position.z) < 3.3) {
+      p.seen = true; seenCount++;
+      $('eye').textContent = '👁 ' + seenCount + ' / ' + pics.length;
+    }
+  });
+  ren.render(scene, cam);
+}
+loop();
+
+addEventListener('resize', () => {
+  cam.aspect = innerWidth / innerHeight; cam.updateProjectionMatrix();
+  ren.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>
