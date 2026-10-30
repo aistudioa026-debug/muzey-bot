@@ -66,11 +66,16 @@ function limb(w, h, d, c, x, y, tip) {
   tip(g, h);
   return g;
 }
-const SKIN = 0xf0c8a4, SHIRT = 0x2b3d6b, PANTS = 0x1b1b1f;
+const pick = a => a[Math.floor(Math.random() * a.length)];
+const SKIN = pick([0xf0c8a4, 0xe0ac84, 0xc68642, 0x8d5524, 0xffdbac]),
+  SHIRT = pick([0x2b3d6b, 0xb03a48, 0x2e7d5b, 0xd4a017, 0x6a3d9a, 0xe07a5f, 0x3a86a8, 0x444444]),
+  PANTS = pick([0x1b1b1f, 0x3b3f4a, 0x5a4632, 0x2c3e50, 0x6b6b6b]),
+  HAIR = pick([0x3a2a20, 0x1a1a1a, 0x7a4a21, 0xc9a227, 0xa0522d, 0x8a8a8a]);
+//
 box(0.38, 0.54, 0.21, SHIRT, 0, 1.17, 0, man);
 box(0.1, 0.08, 0.1, SKIN, 0, 1.47, 0, man);
 ball(0.14, SKIN, 0, 1.64, 0, man);
-ball(0.153, 0x3a2a20, 0, 1.68, -0.025, man, 0.92);
+ball(0.153, HAIR, 0, 1.68, -0.025, man, 0.92);
 ball(0.018, 0x111111, -0.05, 1.64, 0.13, man);
 ball(0.018, 0x111111, 0.05, 1.64, 0.13, man);
 const armL = limb(0.1, 0.5, 0.1, SHIRT, -0.25, 1.42, (g, h) => box(0.09, 0.1, 0.09, SKIN, 0, -h - 0.04, 0, g));
