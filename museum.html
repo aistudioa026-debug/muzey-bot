@@ -16,12 +16,20 @@ canvas{display:block;touch-action:none}
 #zoom img,#zoom video{max-width:96%;max-height:88%;border-radius:6px}
 #x{position:absolute;top:16px;right:16px;width:44px;height:44px;border:0;border-radius:50%;background:#fff;font-size:22px}
 </style>
+#chooser{position:fixed;left:0;right:0;bottom:0;z-index:20;background:rgba(255,255,255,.95);padding:14px 16px 18px;border-radius:20px 20px 0 0;box-shadow:0 -4px 20px rgba(0,0,0,.15)}
+#chooser h3{margin:0 0 8px;font-size:16px}
+.row{display:flex;align-items:center;gap:8px;margin:6px 0}
+.row b{width:52px;font-size:13px}
+.dot{width:30px;height:30px;border-radius:50%;border:3px solid #fff;box-shadow:0 0 0 1px #bbb}
+.dot.on{box-shadow:0 0 0 3px #333}
+#go{width:100%;margin-top:10px;padding:12px;border:0;border-radius:12px;background:#222;color:#fff;font-size:16px}
 </head>
 <body>
 <div id="eye">👁 0 / 0</div>
 <div id="hint">O'ngdagi doira bilan yuring · ekranni surib aylantiring<br>Rasmga bosing — yaqindan ko'rasiz</div>
 <div id="stick"><div id="knob"></div></div>
 <div id="zoom"><button id="x">✕</button><div id="zc"></div></div>
+  <div id="chooser"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
 const rid = location.pathname.split('/').pop();
@@ -83,6 +91,44 @@ const armR = limb(0.1, 0.5, 0.1, SHIRT, 0.25, 1.42, (g, h) => box(0.09, 0.1, 0.0
 const legL = limb(0.14, 0.84, 0.14, PANTS, -0.1, 0.9, (g, h) => box(0.15, 0.07, 0.24, 0x0d0d0d, 0, -h + 0.02, 0.04, g));
 const legR = limb(0.14, 0.84, 0.14, PANTS, 0.1, 0.9, (g, h) => box(0.15, 0.07, 0.24, 0x0d0d0d, 0, -h + 0.02, 0.04, g));
 man.position.set(0, 0, 1);
+man.traverse(o => {
+  if (!o.isMesh) return;
+  const k = o.material.color.getHex();
+  o.userData.part = k === SKIN ? 'skin' : k === SHIRT ? 'shirt' : k === PANTS ? 'pants' : k === HAIR ? 'hair' : '';
+});
+function paintPart(part, hex) {
+  man.traverse(o => { if (o.userData.part === part) o.material.color.setHex(hex); });
+}
+const PART_LIST = [
+  ['skin', 'Teri', [0xf0c8a4, 0xe0ac84, 0xc68642, 0x8d5524, 0xffdbac]],
+  ['hair', 'Soch', [0x3a2a20, 0x1a1a1a, 0x7a4a21, 0xc9a227, 0xa0522d, 0x8a8a8a]],
+  ['shirt', 'Kofta', [0x2b3d6b, 0xb03a48, 0x2e7d5b, 0xd4a017, 0x6a3d9a, 0xe07a5f, 0x3a86a8, 0x444444]],
+  ['pants', 'Shim', [0x1b1b1f, 0x3b3f4a, 0x5a4632, 0x2c3e50, 0x6b6b6b]]
+];
+const chooser = $('chooser');
+chooser.innerHTML = '<h3>Qahramoningizni tanlang</h3>';
+PART_LIST.forEach(([part, label, colors]) => {
+  const row = document.createElement('div');
+  row.className = 'row';
+  row.innerHTML = '<b>' + label + '</b>';
+  colors.forEach(hex => {
+    const d = document.createElement('div');
+    d.className = 'dot';
+    d.style.background = '#' + hex.toString(16).padStart(6, '0');
+    d.onclick = () => {
+      paintPart(part, hex);
+      row.querySelectorAll('.dot').forEach(x => x.classList.remove('on'));
+      d.classList.add('on');
+    };
+    row.appendChild(d);
+  });
+  chooser.appendChild(row);
+});
+const goBtn = document.createElement('button');
+goBtn.id = 'go';
+goBtn.textContent = 'Muzeyga kirish';
+goBtn.onclick = () => chooser.remove();
+chooser.appendChild(goBtn);
 
 // ---------- xona ----------
 function build(items) {
