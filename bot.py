@@ -15,7 +15,7 @@ os.makedirs(DATA, exist_ok=True)
 bot = Bot(TOKEN)
 dp = Dispatcher()
 rooms = {}  # user_id -> room_id
-
+LOCK = asyncio.Lock()
 
 def room_dir(rid):
     return os.path.join(DATA, rid)
@@ -58,6 +58,11 @@ async def start(m: Message):
 
 @dp.message(F.photo | F.video)
 async def media(m: Message):
+    async with LOCK:
+        await media_inner(m)
+
+
+async def media_inner(m: Message):
     uid = m.from_user.id
     rid = rooms.get(uid) or new_room(uid)
     items = load(rid)
